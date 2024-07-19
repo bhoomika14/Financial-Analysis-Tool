@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# financial_forecasting_with_llm
- 
 =======
 # Financial Analysis Tool
 
