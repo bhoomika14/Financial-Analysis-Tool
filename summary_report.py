@@ -60,7 +60,7 @@ def trend_seasonality(dt):
     try:
       ts = pd.DataFrame()
       series = TimeSeries.from_dataframe(dt, time_col = "DATES", value_cols="AMOUNT", fill_missing_dates=True, freq="MS")
-      trend_season = extract_trend_and_seasonality(series, method='STL', model = ModelMode.ADDITIVE)
+      trend_season = extract_trend_and_seasonality(series, method='naive', model = ModelMode.ADDITIVE)
       ts['trend'] = trend_season[0].pd_series()
       ts['seasonality'] = trend_season[1].pd_series()
       return ts
