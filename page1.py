@@ -11,23 +11,29 @@ from main import data, df_24
 from summary_report import get_outlier_count, trend_seasonality
 from llm_insights import llm_data
 from forecast import forecast_df, forecast_combinations, best_model
+import matplotlib.pyplot as plt
 
 ###############################################################################################################################################
 
-new_df = pd.DataFrame()  # dataframe with combinations chosen by user 
-dt = pd.DataFrame()      # a dataframe copy to contain original dataframe
-nbeats_count = len(best_model[best_model['MODEL']=="N-BEATS"])
-gru_count = len(best_model[best_model['MODEL']=='GRU'])
-lstm_count = len(best_model[best_model['MODEL'] == 'LSTM'])
+# nbeats_count = len(best_model[best_model['MODEL']=="N-BEATS"])
+# gru_count = len(best_model[best_model['MODEL']=='GRU'])
+# lstm_count = len(best_model[best_model['MODEL'] == 'LSTM'])
 
 ### Tab that shows to eliminate <24 months ###
 tab = st.columns(4)
 c1, c2, c3, c4 = st.columns(4)
+
+st._config.set_option(f'theme.backgroundColor' ,"white" )
+st._config.set_option(f'theme.base' ,"light" )
+st._config.set_option(f'theme.primaryColor' ,"#5591f5" )
+st._config.set_option(f'theme.secondaryBackgroundColor' ,"#82E1D7" )
+st._config.set_option(f'theme.textColor' ,"#0a1464")
+
 with tab[3]:
     toggled = st.toggle('Eliminate < 24 months')
 if toggled is True:
     with c1:
-        market = st.multiselect("Choose combinations", ["8191"], default=['8191'], max_selections=1)
+        market = st.multiselect("Select MARKET", df_24['MARKET'].unique(), default=[8191], max_selections=1)
     with c2:
         account = st.multiselect("Select ACCOUNT_ID", df_24['ACCOUNT_ID'].unique(), max_selections=1)
     with c3:
@@ -40,7 +46,7 @@ if toggled is True:
     
 else:
     with c1:
-        market = st.multiselect("Select MARKET", ["8191"], default=['8191'], max_selections=1)
+        market = st.multiselect("Select MARKET", data['MARKET'].unique(), default=[8191], max_selections=1)
     with c2:
         account = st.multiselect("Select ACCOUNT_ID", data['ACCOUNT_ID'].unique(), max_selections=1)
     with c3:
@@ -99,173 +105,245 @@ if not apply_button:
     with st.container(border=True):
         st.header("Best Performing Model out of N-BEATS, GRU, LSTM")
         st.subheader("Gated Recurrent Unit - GRU")
+
 ####################################################################################################
 # Analysis after apply#
 ####################################################################################################
 if apply_button:
     try:
-        tab1, tab2, tab3 = st.tabs(['ANALYSIS', 'INSIGHTS', 'FORECAST'])
+        if toggled is True:
+            tab1, tab2, tab3 = st.tabs(['ANALYSIS', 'INSIGHTS', 'FORECAST'])
 
-        #filtered dataframe after applying the combinations in UI
-        new_df = dt[(dt['MARKET']==int(market[0])) &
-                    (dt['ACCOUNT_ID']==int(account[0])) &
-                    (dt['CHANNEL_ID']==int(channel[0])) &
-                    (dt['MPG_ID']==int(mpg[0]))].reset_index()
-        new_df = new_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID', 'DATES_UPD', 'AMOUNT']]
-        new_df['DATES'] = pd.to_datetime(new_df['DATES_UPD'])
-        new_df['YEAR'] = new_df['DATES'].dt.year
-        new_df['MONTH'] = new_df['DATES'].dt.month_name()
-        new_df['YEAR'] = new_df['YEAR'].astype(str)
-        
-        filtered_combination = [int(market[0]), int(account[0]),int(channel[0]), int(mpg[0])]
-        
-
-        ##### Analysis Tab  #########
-        with tab1:
-            column1, column2, column3 = st.columns((0.4, 0.4, 0.4), vertical_alignment='center')
-            col1, col2 = st.columns((0.4, 0.5), gap = 'small', vertical_alignment='center')
-            col4, col5 = st.columns((0.5, 0.5), gap = 'small')
+            #filtered dataframe after applying the combinations in UI
+            new_df = dt[dt['MARKET'].isin(market) & dt['ACCOUNT_ID'].isin(account) & dt['CHANNEL_ID'].isin(channel) & dt['MPG_ID'].isin(mpg)]
+            # new_df = dt[(dt['MARKET']==int(market[0])) &
+            #             (dt['ACCOUNT_ID']==int(account[0])) &
+            #             (dt['CHANNEL_ID']==int(channel[0])) &
+            #             (dt['MPG_ID']==int(mpg[0]))]
+            new_df = new_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID', 'DATES_UPD', 'AMOUNT']]
+            new_df.rename(columns={"DATES_UPD": "PERIOD_DATES"}, inplace=True)
+            new_df['DATES'] = pd.to_datetime(new_df['PERIOD_DATES'])
             
-            # Outliers, Negatives and Zero
-            outliers, index = get_outlier_count(new_df['AMOUNT'])
-            outliers_df = pd.DataFrame()
-            if outliers!=0:
-                for i in index:
-                    outliers_df = pd.concat([outliers_df, new_df[new_df['AMOUNT']==i]], ignore_index=True)
-                with column1:
-                    container = st.container()
-                    # container.write("Outlier Count")
-                    # container.write(outliers)
-                    with container.popover(f"{outliers} Outlier found", use_container_width=True):
-                        outliers_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']] = outliers_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']].astype("str")
-                        st.data_editor(outliers_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID', 'DATES', 'AMOUNT']])
-            else:
-                with column1:
-                    container = st.container(border = True)
-                    container.write("No outliers found")
+            new_df['YEAR'] = new_df['DATES'].dt.year
+            new_df['MONTH'] = new_df['DATES'].dt.month_name()
+            new_df['YEAR'] = new_df['YEAR'].astype(str)
             
-            negative = (new_df['AMOUNT'] < 0).sum()
-            negative_df = new_df[new_df['AMOUNT']<0]
-            if len(negative_df)!=0:
-                with column2:
-                    container = st.container()
-                    with container.popover(f"{negative} Negative Amount found", use_container_width=True):
-                        negative_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']] = negative_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']].astype("str")
-                        st.data_editor(negative_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID', 'DATES', 'AMOUNT']])
-            else:
-                with column2:
-                    container = st.container(border = True)
-                    container.write("No negative amount found")
-                    
+            filtered_combination = [int(market[0]), int(account[0]),int(channel[0]), int(mpg[0])]
+            
 
+            ##### Analysis Tab  #########
+            with tab1:
+                column1, column2, column3 = st.columns((0.4, 0.4, 0.4), vertical_alignment='center')
+                col1 = st.columns(1, gap = 'small', vertical_alignment='center')
+                col4, col5 = st.columns((0.5, 0.5), gap = 'small')
+                
+                # Outliers, Negatives and Zero
+                try:
+                    def highlight_outliers(row):
+                        return ['background-color: red; width: 0%;' if row['AMOUNT'] in outlier_val else '' for _ in row]
+                   
+                    outliers, outlier_val = get_outlier_count(new_df['AMOUNT'])
+                    outliers_df = pd.DataFrame()
+                    if outliers!=0:
+                        outliers_df = new_df[new_df['AMOUNT'].isin(outlier_val)]
+                        styled_df = new_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID', 'DATES', 'AMOUNT']].style.apply(highlight_outliers, axis=1)
+                        #outlier_df = new_df.style.apply(color_cells, subset="AMOUNT")
+                    #     for i in outlier_val:
+                    #         outliers_df = pd.concat([outliers_df, new_df[new_df['AMOUNT']==i]], ignore_index=True)
+                        with column1:
+                            container = st.container()
+                            # container.write(f"Outlier Count - {outliers}")
+                            
+                            with st.container():
+                                outliers_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']] = outliers_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']].astype("str")
+                                outliers_df = outliers_df.sort_values(by="DATES")
+                            #st.data_editor(outliers_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID', "DATES", "AMOUNT"]], hide_index=True)
+                            #st.write(styled_df.hide(axis="index").to_html(), unsafe_allow_html=True )
+                            
 
-            zero = (new_df['AMOUNT'] == 0).sum()
-            zero_df = new_df[new_df['AMOUNT'] == 0]
-            if len(zero_df)!=0:
-                with column3:
-                    container = st.container()
-                    with container.popover(f"{zero} Zero Amount found", use_container_width=True):
-                        zero_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']] = zero_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']].astype("str")
-                        st.data_editor(zero_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID', 'DATES', 'AMOUNT']])
-                    
-            else:
-                with column3:
-                    container = st.container(border = True)
-                    container.write("No zero amount found")
+                                with container.popover(f"{outliers} Outlier found", use_container_width=True):
+                                    fig = px.line(new_df.sort_values(by="DATES"), x="DATES", y="AMOUNT", width=2500)
+                                    fig.add_scatter(x=outliers_df['DATES'], y=outliers_df['AMOUNT'], name="Outliers", mode="markers", marker=dict(color='red', size=10, symbol='circle'))
+                                    st.plotly_chart(fig, use_container_width=True)
+                               
+                    else:
+                        with column1:
+                            container = st.container(border = True)
+                            container.write("No outliers found")
+                except Exception as e:
+                    print(f"{e} in finding outlier")
+                
+                try:
+                    negative = (new_df['AMOUNT'] < 0).sum()
+                    negative_df = new_df[new_df['AMOUNT']<0]
+                    if len(negative_df)!=0:
+                        with column2:
+                            container = st.container()
+                            with container.popover(f"{negative} Negative Amount found", use_container_width=True):
+                                negative_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']] = negative_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']].astype("str")
+                                st.data_editor(negative_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID', 'DATES', 'AMOUNT']], hide_index=True)
+                    else:
+                        with column2:
+                            container = st.container(border = True)
+                            container.write("No negative amount found")
+                except Exception as e:
+                    print(e)
+                        
 
-            # Top containers that gives KPI - pie chart and bar chart
-            with col1.container():
-                with st.container(border=True):
-                    total_per_year = new_df.groupby('YEAR')['AMOUNT'].sum().reset_index()
-                    fig = px.pie(total_per_year, names="YEAR", values='AMOUNT', color = "YEAR", height=300, title="Yearly Revenue")
-                    st.plotly_chart(fig, theme=None)
+                try:
+                    zero = (new_df['AMOUNT'] == 0).sum()
+                    zero_df = new_df[new_df['AMOUNT'] == 0]
+                    if len(zero_df)!=0:
+                        with column3:
+                            container = st.container()
+                            with container.popover(f"{zero} Zero Amount found", use_container_width=True):
+                                zero_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']] = zero_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']].astype("str")
+                                st.data_editor(zero_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID', 'DATES', 'AMOUNT']], hide_index=True)
+                            
+                    else:
+                        with column3:
+                            container = st.container(border = True)
+                            container.write("No zero amount found")
+                except Exception as e:
+                    print(e)
 
-            with col2.container():
-                with st.container(border=True):
-                    total_per_month = new_df.groupby(['YEAR', 'MONTH'])['AMOUNT'].sum().reset_index()
+                # Top containers that gives KPI - pie chart and bar chart
+                # with col1.container():
+                #     with st.container(border=True):
+                #         total_per_year = new_df.groupby('YEAR')['AMOUNT'].sum().reset_index()
+                #         fig = px.pie(total_per_year, names="YEAR", values='AMOUNT', color = "YEAR", height=300, title="Yearly Revenue")
+                #         st.plotly_chart(fig)
+
+                @st.experimental_fragment
+                def year_radio():
+                    year = st.selectbox("Choose year:",new_df['YEAR'].unique())
+                    yearly_data = new_df[new_df['YEAR']==year]
+                    total_per_month = yearly_data.groupby(['YEAR', 'MONTH'])['AMOUNT'].sum().reset_index()
                     months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
                     total_per_month['MONTH'] = pd.Categorical(total_per_month['MONTH'], categories=months, ordered=True)
                     total_per_month = total_per_month.sort_values(by='MONTH')
-                    fig = px.bar(total_per_month, x="MONTH", y="AMOUNT", color="YEAR", height=300, title="Monthly Revenue")
-                    st.plotly_chart(fig, theme=None)
-            
-            
-            #trend and seasonality of the product specified
-            ts_obj = trend_seasonality(new_df)
-
-            # Second container that contains trend and seasonality
-            with col4.container(border=True):
-                fig = px.line(ts_obj, y='trend', title="Trend", height=300, color=None, labels={'DATES':'DATES', 'trend':'AMOUNT'})
-                st.plotly_chart(fig)
-            with col5.container(border=True):
-                fig = px.line(ts_obj, y='seasonality', title="Seasonality", height=300, color=None, labels={'DATES':'DATES', 'seasonality':'AMOUNT'})
-                st.plotly_chart(fig)
+                    fig = px.line(total_per_month, x="MONTH", y="AMOUNT", color="YEAR", height=300, title="Monthly Revenue")
+                    st.plotly_chart(fig)
 
 
-        ##### Tab 2 for LLM Insights ########    
-        with tab2:
-            data_for_llm = new_df[['DATES_UPD', 'AMOUNT']]
-            with st.container(border=True):
-                st.header("Insights from LLM")
-                st.write(llm_data(data_for_llm))
+                with st.container(border=True):
+                    year_radio()                    
 
-        ##### Tab 3 for prediction and forecasting ######
-        with tab3:
-            result_data = pd.DataFrame()  # Dataframe to store prediction and forecast
-
-            f_combination = [c for c in forecast_combinations if c == filtered_combination]
-
-            for i in f_combination:
-                result_data = forecast_df[(forecast_df['MARKET'] == i[0]) &         # Filter the data DataFrame where the 'MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID' column matches the element of ids
-                        (forecast_df['ACCOUNT_ID'] == i[1]) &
-                        (forecast_df['CHANNEL_ID'] == i[2]) &
-                        (forecast_df['MPG_ID'] == i[3])]
-                
-            result_data.set_index("DATES", inplace=True)
-            result_data_nbeats = result_data[result_data['MODEL']=='N-BEATS']
-            result_data_gru = result_data[result_data['MODEL']=='GRU']
-            result_data_lstm = result_data[result_data['MODEL']=='LSTM']
-            
-            best_model_data = best_model[(best_model['MARKET']==int(market[0])) &
-                                        (best_model['ACCOUNT_ID']==int(account[0])) &
-                                        (best_model['CHANNEL_ID']==int(channel[0])) &
-                                        (best_model['MPG_ID']==int(mpg[0]))]
-            best_model_data = best_model_data['MODEL'].iloc[0]
-
-            
-
-            with st.container():
-                new_df_copy = new_df.copy()
-                new_df_copy['DATES_UPD'] = pd.to_datetime(new_df_copy['DATES_UPD'])
-                new_df_copy.set_index("DATES_UPD", inplace=True)
-                new_df_copy = new_df_copy.sort_index()
-                print(new_df_copy)
-                fig = px.line(data_frame=new_df_copy, x=new_df_copy.index, y="AMOUNT")
-                fig.update_layout(xaxis=dict(title="PERIOD_DATE"), yaxis=dict(title="AMOUNT"))
-
-                if best_model_data == "N-BEATS":
-                    fig.add_trace(go.Scatter(x=result_data_nbeats.index, y=result_data_nbeats['AMOUNT'], mode="lines", name="<b>N-BEATS - <i>Best Model</i></b>"))
                     
-                    
-                else:
-                    fig.add_scatter(x=result_data_nbeats.index, y=result_data_nbeats['AMOUNT'], mode="lines", name="N-BEATS")
                 
-                if best_model_data == "GRU":
-                    
-                    fig.add_scatter(x=result_data_gru.index, y=result_data_gru['AMOUNT'], mode="lines", name="<b>GRU - <i>Best Model</i></b>")
-                else:
-                    fig.add_scatter(x=result_data_gru.index, y=result_data_gru['AMOUNT'], mode="lines", name="GRU")
                 
-                if best_model_data == "LSTM":
-                    fig.add_scatter(x=result_data_lstm.index, y=result_data_lstm['AMOUNT'], mode="lines", name="<b>LSTM - <i>Best Model</i></b>")
+                #trend and seasonality of the product specified
+                ts_obj = trend_seasonality(new_df)
+
+                if ts_obj is not None:
+                    # Second container that contains trend and seasonality
+                    with col4.container(border=True):
+                        fig = px.line(ts_obj, y='trend', title="Trend", height=300, color=None, labels={'DATES':'DATES', 'trend':'AMOUNT'})
+                        st.plotly_chart(fig)
+                    with col5.container(border=True):
+                        fig = px.line(ts_obj, y='seasonality', title="Seasonality", height=300, color=None, labels={'DATES':'DATES', 'seasonality':'AMOUNT'})
+                        st.plotly_chart(fig)
                 else:
-                    fig.add_scatter(x=result_data_lstm.index, y=result_data_lstm['AMOUNT'], mode="lines", name="LSTM")
+                    with st.container(border=True):
+                        st.write("No trend and seasonality found")
 
 
-                st.plotly_chart(fig, use_container_width=True)
+            ##### Tab 2 for LLM Insights ########    
+            with tab2:
+                data_for_llm = new_df[['PERIOD_DATES', 'AMOUNT']]
+                with st.container(border=True):
+                    st.header("Insights from LLM")
+                    st.write(llm_data(data_for_llm))
 
+            ##### Tab 3 for prediction and forecasting ######
+            with tab3:
+                result_data = pd.DataFrame()  # Dataframe to store prediction and forecast
+
+                f_combination = [c for c in forecast_combinations if c == filtered_combination]
+
+                for i in f_combination:
+                    result_data = forecast_df[(forecast_df['MARKET'] == i[0]) &         # Filter the data DataFrame where the 'MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID' column matches the element of ids
+                            (forecast_df['ACCOUNT_ID'] == i[1]) &
+                            (forecast_df['CHANNEL_ID'] == i[2]) &
+                            (forecast_df['MPG_ID'] == i[3])]
+                    
+                result_data.set_index("DATES", inplace=True)
+                result_data_nbeats = result_data[result_data['MODEL']=='N-BEATS']
+                result_data_gru = result_data[result_data['MODEL']=='GRU']
+                result_data_lstm = result_data[result_data['MODEL']=='LSTM']
+                
+                best_model_data = best_model[(best_model['MARKET']==int(market[0])) &
+                                            (best_model['ACCOUNT_ID']==int(account[0])) &
+                                            (best_model['CHANNEL_ID']==int(channel[0])) &
+                                            (best_model['MPG_ID']==int(mpg[0]))]
+                best_model_data = best_model_data['MODEL'].iloc[0]
+
+                
+                with st.container():
+                    new_df_copy = new_df.copy()
+                    new_df_copy['PERIOD_DATES'] = pd.to_datetime(new_df_copy['PERIOD_DATES'])
+                    new_df_copy.set_index("PERIOD_DATES", inplace=True)
+                    new_df_copy = new_df_copy.sort_index()
+                    
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=new_df_copy.index, y=new_df_copy['AMOUNT'], mode="lines",name="ACTUAL_AMOUNT", showlegend=True))
+                    #fig = px.line(data_frame=new_df_copy, x=new_df_copy.index, y="AMOUNT", labels={"AMOUNT:ACTUAL_AMOUNT"})
+                    fig.update_layout(xaxis=dict(title="PERIOD_DATE", dtick="M1",tickformat="%b %Y"), yaxis=dict(title="AMOUNT"))
+
+                    if best_model_data == "N-BEATS":
+                        residuals = abs(result_data_nbeats['ACTUAL_AMOUNT'][:9] - result_data_nbeats['AMOUNT'][:9])
+                        
+                        error_mean = np.array(residuals.mean())
+                        conf_percent = (1 - (error_mean/result_data_nbeats['ACTUAL_AMOUNT'][:9].mean()))*100
+                        #error = np.abs(result_data_gru['ACTUAL_AMOUNT'][:9].sum() - round(result_data_gru['AMOUNT'][:9]).sum())
+                        # std = np.sqrt(variance)
+                        # conf_percent = 100 - ((std/(result_data_nbeats['ACTUAL_AMOUNT'][:9].mean()) * 100))
+                        # if conf_percent >= 100:
+                        #     conf_percent = min(conf_percent, 90)
+                        # elif conf_percent<=0:
+                        #     conf_percent = max(conf_percent, 50)
+                        # else:
+                        #     conf_percent = round(conf_percent, 2)
+                        
+                        fig.add_trace(go.Scatter(x=result_data_nbeats.index, y=result_data_nbeats['AMOUNT'], mode="lines", name=f"<b>N-BEATS - <i>Best Model</i></b>"))
+                    else:
+                        fig.add_scatter(x=result_data_nbeats.index, y=result_data_nbeats['AMOUNT'], mode="lines", name="N-BEATS")
+                    
+                    if best_model_data == "GRU":
+                        residuals = np.array(result_data_gru['ACTUAL_AMOUNT'][:9]) - np.array(result_data_gru['AMOUNT'][:9])
+                        variance = np.var(residuals)
+                        residuals = abs(np.array(result_data_nbeats['ACTUAL_AMOUNT'][:9]) - np.abs(result_data_nbeats['AMOUNT'][:9]))
+                        error_mean = np.array(residuals.mean())
+                        conf_percent = (1 - (error_mean/result_data_nbeats['ACTUAL_AMOUNT'][:9].mean()))*100
+                        
+                        fig.add_scatter(x=result_data_gru.index, y=result_data_gru['AMOUNT'], mode="lines", name=f"<b>GRU - <i>Best Model</i></b>")
+                    else:
+                        fig.add_scatter(x=result_data_gru.index, y=result_data_gru['AMOUNT'], mode="lines", name="GRU")
+                    
+                    if best_model_data == "LSTM":
+                        residuals = np.array(result_data_lstm['ACTUAL_AMOUNT'][:9]) - np.array(result_data_lstm['AMOUNT'][:9])
+                        variance = np.var(residuals)
+                        #error = np.abs(result_data_gru['ACTUAL_AMOUNT'][:9].sum() - round(result_data_gru['AMOUNT'][:9]).sum())
+                        std = np.sqrt(variance)
+                        conf_percent = 100 - ((std/(result_data_lstm['ACTUAL_AMOUNT'][:9].mean()) * 100)) 
+                        if conf_percent >= 100:
+                            conf_percent = min(conf_percent, 90)
+                        elif conf_percent<=0:
+                            conf_percent = max(conf_percent, 50)
+                        else:
+                            conf_percent = round(conf_percent, 2)
+                        fig.add_scatter(x=result_data_lstm.index, y=result_data_lstm['AMOUNT'], mode="lines", name=f"<b>LSTM - <i>Best Model</i></b>")
+                    else:
+                        fig.add_scatter(x=result_data_lstm.index, y=result_data_lstm['AMOUNT'], mode="lines", name="LSTM")
+
+                    st.plotly_chart(fig, use_container_width=True)
+                    with st.container():
+                        st.info(f"Best Model is {best_model_data} with confidence percentage {conf_percent}%")
+        else:
+            st.error("Please eliminate <24 months data and choose the combinations.")
     except Exception as e:
-        st.error("Something went wrong! Please try again...")
+        print(e)
+        st.error("Something went wrong! Please try again. Make sure to choose all the IDs", icon="🚨")
 
         
 
