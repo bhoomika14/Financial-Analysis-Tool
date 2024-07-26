@@ -1,5 +1,5 @@
 from scipy import stats
-from tsmoothie.smoother import LowessSmoother
+from tsmoothie.smoother import LowessSmoother, DecomposeSmoother
 import pandas as pd
 from main import df, data, months_seq, combinations_greater_24, combinations_lesser_24
 from scipy import stats
@@ -13,7 +13,7 @@ def get_outlier_count(series):
   d = series.values.reshape(1, -1)
 
   # Create a LowessSmoother object with specified parameters for smoothing
-  smoother = LowessSmoother(smooth_fraction = 0.4, iterations = 4)
+  smoother = LowessSmoother(smooth_fraction = 0.6, iterations=6)
 
   # Apply the smoother to the data to obtain smoothed values
   smooth_data = smoother.smooth(d)
@@ -23,7 +23,7 @@ def get_outlier_count(series):
   outlier_index = []
 
   # Generate prediction intervals from the smoother
-  low, up = smoother.get_intervals('prediction_interval')
+  low, up = smoother.get_intervals('prediction_interval', confidence=0.5)
 
   # Extract the smoothed data points and the upper and lower bounds of the intervals
   points = smoother.data[0]  # Smoothed data points
@@ -38,8 +38,8 @@ def get_outlier_count(series):
 
     # Check if the current point is outside the prediction interval bounds
     if current_point > current_up or current_point < current_low:
-        outlier_val.append(current_point)                   # Add the current point to the outlier list
-  return len(outlier_val), outlier_val
+       outlier_val.append(current_point)
+  return len(outlier_val), outlier_val, smooth_data
 
 def summary_stats(dataframe):
     df = dataframe
