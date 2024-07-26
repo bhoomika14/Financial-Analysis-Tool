@@ -65,26 +65,13 @@ if not apply_button:
     leader_board = st.tabs(["LEADERBOARD"])
 
     # if account_id is not input by the user
-    if not account:
-        with leader_board[0]:
-            total_amount = data[['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID', 'AMOUNT']].groupby(['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID'])['AMOUNT'].sum().reset_index().sort_values(by='AMOUNT', ascending=False)
-            top_5_mpg = total_amount.iloc[:5]
-            bottom_5_mpg = total_amount.iloc[-5:]
-            top_5_mpg[['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']] = top_5_mpg[['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']].astype(str)
-            bottom_5_mpg[['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']] = bottom_5_mpg[['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']].astype(str)
-            col1, col2 = st.columns(2)
-            with col1.container(border=True):
-                st.header("Best performing products")
-                st.dataframe(top_5_mpg, hide_index=True, use_container_width=True)
-            with col2.container(border=True):
-                st.header("Least performing products")
-                st.dataframe(bottom_5_mpg, hide_index=True, use_container_width=True)
-    
-    # if account_id is input by the user
-    else:
+    if len(account)!=0:
         with leader_board[0]:
             dataframe = data.copy()
-            dataframe = dataframe[dataframe['ACCOUNT_ID'].isin(account)]
+            if len(channel)==0:
+                dataframe = dataframe[dataframe['ACCOUNT_ID'].isin(account)]
+            else:
+                dataframe = dataframe[dataframe['ACCOUNT_ID'].isin(account) & dataframe['CHANNEL_ID'].isin(channel)]
             total_amount = dataframe[['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID', 'AMOUNT']].groupby(['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID'])['AMOUNT'].sum().reset_index().sort_values(by='AMOUNT', ascending=False)
             if len(total_amount)<10:
                 top_5_mpg = total_amount.iloc[:round(len(total_amount)/2)]
@@ -101,6 +88,22 @@ if not apply_button:
             with col2.container(border=True):
                 st.header("Least performing products")
                 st.dataframe(bottom_5_mpg, hide_index=True, use_container_width=True)
+    else:
+        with leader_board[0]:
+            total_amount = data[['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID', 'AMOUNT']].groupby(['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID'])['AMOUNT'].sum().reset_index().sort_values(by='AMOUNT', ascending=False)
+            top_5_mpg = total_amount.iloc[:5]
+            bottom_5_mpg = total_amount.iloc[-5:]
+            top_5_mpg[['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']] = top_5_mpg[['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']].astype(str)
+            bottom_5_mpg[['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']] = bottom_5_mpg[['MARKET','ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID']].astype(str)
+            col1, col2 = st.columns(2)
+            with col1.container(border=True):
+                st.header("Best performing products")
+                st.dataframe(top_5_mpg, hide_index=True, use_container_width=True)
+            with col2.container(border=True):
+                st.header("Least performing products")
+                st.dataframe(bottom_5_mpg, hide_index=True, use_container_width=True)
+            
+    
 
     with st.container(border=True):
         st.header("Best Performing Model out of N-BEATS, GRU, LSTM")
@@ -123,7 +126,7 @@ if apply_button:
             new_df = new_df[['MARKET', 'ACCOUNT_ID', 'CHANNEL_ID', 'MPG_ID', 'DATES_UPD', 'AMOUNT']]
             new_df.rename(columns={"DATES_UPD": "PERIOD_DATES"}, inplace=True)
             new_df['DATES'] = pd.to_datetime(new_df['PERIOD_DATES'])
-            
+            new_df.sort_values(by="DATES")
             new_df['YEAR'] = new_df['DATES'].dt.year
             new_df['MONTH'] = new_df['DATES'].dt.month_name()
             new_df['YEAR'] = new_df['YEAR'].astype(str)
@@ -133,7 +136,7 @@ if apply_button:
 
             ##### Analysis Tab  #########
             with tab1:
-                column1, column2, column3 = st.columns((0.4, 0.4, 0.4), vertical_alignment='center')
+                column1, column2, column3 = st.columns((0.4, 0.4, 0.4), vertical_alignment='top')
                 col1 = st.columns(1, gap = 'small', vertical_alignment='center')
                 col4, col5 = st.columns((0.5, 0.5), gap = 'small')
                 
@@ -142,7 +145,7 @@ if apply_button:
                     def highlight_outliers(row):
                         return ['background-color: red; width: 0%;' if row['AMOUNT'] in outlier_val else '' for _ in row]
                    
-                    outliers, outlier_val = get_outlier_count(new_df['AMOUNT'])
+                    outliers, outlier_val, smooth_data = get_outlier_count(new_df['AMOUNT'])
                     outliers_df = pd.DataFrame()
                     if outliers!=0:
                         outliers_df = new_df[new_df['AMOUNT'].isin(outlier_val)]
@@ -164,12 +167,17 @@ if apply_button:
                                 with container.popover(f"{outliers} Outlier found", use_container_width=True):
                                     fig = px.line(new_df.sort_values(by="DATES"), x="DATES", y="AMOUNT", width=2500)
                                     fig.add_scatter(x=outliers_df['DATES'], y=outliers_df['AMOUNT'], name="Outliers", mode="markers", marker=dict(color='red', size=10, symbol='circle'))
+                                    print(outliers_df['AMOUNT'])
+                                    print(smooth_data.data)
                                     st.plotly_chart(fig, use_container_width=True)
                                
                     else:
                         with column1:
-                            container = st.container(border = True)
-                            container.write("No outliers found")
+                            # container = st.container(border = True)
+                            # container.write("No outliers found") 
+                            container = st.container(border = False)
+                            container.popover(f"{outliers} Outlier found", use_container_width=True)
+
                 except Exception as e:
                     print(f"{e} in finding outlier")
                 
@@ -215,8 +223,8 @@ if apply_button:
                 #         st.plotly_chart(fig)
 
                 @st.experimental_fragment
-                def year_radio():
-                    year = st.selectbox("Choose year:",new_df['YEAR'].unique())
+                def year_dropdown():
+                    year = st.selectbox("Choose year:",sorted(new_df['YEAR'].unique()))
                     yearly_data = new_df[new_df['YEAR']==year]
                     total_per_month = yearly_data.groupby(['YEAR', 'MONTH'])['AMOUNT'].sum().reset_index()
                     months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -227,7 +235,7 @@ if apply_button:
 
 
                 with st.container(border=True):
-                    year_radio()                    
+                    year_dropdown()                    
 
                     
                 
@@ -292,46 +300,27 @@ if apply_button:
 
                     if best_model_data == "N-BEATS":
                         residuals = abs(result_data_nbeats['ACTUAL_AMOUNT'][:9] - result_data_nbeats['AMOUNT'][:9])
-                        
                         error_mean = np.array(residuals.mean())
-                        conf_percent = (1 - (error_mean/result_data_nbeats['ACTUAL_AMOUNT'][:9].mean()))*100
-                        #error = np.abs(result_data_gru['ACTUAL_AMOUNT'][:9].sum() - round(result_data_gru['AMOUNT'][:9]).sum())
-                        # std = np.sqrt(variance)
-                        # conf_percent = 100 - ((std/(result_data_nbeats['ACTUAL_AMOUNT'][:9].mean()) * 100))
-                        # if conf_percent >= 100:
-                        #     conf_percent = min(conf_percent, 90)
-                        # elif conf_percent<=0:
-                        #     conf_percent = max(conf_percent, 50)
-                        # else:
-                        #     conf_percent = round(conf_percent, 2)
+                        conf_percent = round(abs(1 - (error_mean/result_data_nbeats['ACTUAL_AMOUNT'][:9].mean()))*100, 2)
                         
                         fig.add_trace(go.Scatter(x=result_data_nbeats.index, y=result_data_nbeats['AMOUNT'], mode="lines", name=f"<b>N-BEATS - <i>Best Model</i></b>"))
                     else:
                         fig.add_scatter(x=result_data_nbeats.index, y=result_data_nbeats['AMOUNT'], mode="lines", name="N-BEATS")
                     
                     if best_model_data == "GRU":
-                        residuals = np.array(result_data_gru['ACTUAL_AMOUNT'][:9]) - np.array(result_data_gru['AMOUNT'][:9])
-                        variance = np.var(residuals)
-                        residuals = abs(np.array(result_data_nbeats['ACTUAL_AMOUNT'][:9]) - np.abs(result_data_nbeats['AMOUNT'][:9]))
+                        residuals = abs(result_data_gru['ACTUAL_AMOUNT'][:9] - result_data_gru['AMOUNT'][:9])
                         error_mean = np.array(residuals.mean())
-                        conf_percent = (1 - (error_mean/result_data_nbeats['ACTUAL_AMOUNT'][:9].mean()))*100
+                        conf_percent = round(abs(1 - error_mean/result_data_gru['ACTUAL_AMOUNT'][:9].mean())*100, 2)
                         
                         fig.add_scatter(x=result_data_gru.index, y=result_data_gru['AMOUNT'], mode="lines", name=f"<b>GRU - <i>Best Model</i></b>")
                     else:
                         fig.add_scatter(x=result_data_gru.index, y=result_data_gru['AMOUNT'], mode="lines", name="GRU")
                     
                     if best_model_data == "LSTM":
-                        residuals = np.array(result_data_lstm['ACTUAL_AMOUNT'][:9]) - np.array(result_data_lstm['AMOUNT'][:9])
-                        variance = np.var(residuals)
-                        #error = np.abs(result_data_gru['ACTUAL_AMOUNT'][:9].sum() - round(result_data_gru['AMOUNT'][:9]).sum())
-                        std = np.sqrt(variance)
-                        conf_percent = 100 - ((std/(result_data_lstm['ACTUAL_AMOUNT'][:9].mean()) * 100)) 
-                        if conf_percent >= 100:
-                            conf_percent = min(conf_percent, 90)
-                        elif conf_percent<=0:
-                            conf_percent = max(conf_percent, 50)
-                        else:
-                            conf_percent = round(conf_percent, 2)
+                        residuals = abs(result_data_lstm['ACTUAL_AMOUNT'][:9] - result_data_lstm['AMOUNT'][:9])
+                        error_mean = np.array(residuals.mean())
+                        conf_percent = round(abs(1 - error_mean/result_data_lstm['ACTUAL_AMOUNT'][:9].mean())*100, 2)
+
                         fig.add_scatter(x=result_data_lstm.index, y=result_data_lstm['AMOUNT'], mode="lines", name=f"<b>LSTM - <i>Best Model</i></b>")
                     else:
                         fig.add_scatter(x=result_data_lstm.index, y=result_data_lstm['AMOUNT'], mode="lines", name="LSTM")
